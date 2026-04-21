@@ -1,0 +1,5 @@
+1. Aislamiento: Fíjate en chat.py. Primero filtramos el asistente y luego search_context filtra los fragmentos por ese ID específico. No hay mezcla posible.
+
+2. Citas: El system_prompt incluye explícitamente la orden de citar fuentes y la instrucción de "no inventar" (hallucination guardrail).
+
+3. Persistencia: En main.py, deberás llamar a una función que guarde cada user_message y la respuesta del assistant en la tabla messages que definiste en tu SQL.
