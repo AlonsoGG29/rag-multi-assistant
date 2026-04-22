@@ -4,9 +4,9 @@ from sqlalchemy.orm import Session
 from ..models import Chunk
 
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    api_key=os.getenv("Fkl6wC67PCNR3xsuc7eHKzlHJ1xuqeTSy5HV7RHEow9UXiyGovfgJQQJ99CDACfhMk5XJ3w3AAAAACOGYGrB"),
     api_version="2024-02-01",
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
+    azure_endpoint=os.getenv("https://aggfoundry.openai.azure.com")
 )
 
 def get_embedding(text):
