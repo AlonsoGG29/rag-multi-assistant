@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from pgvector.sqlalchemy import Vector
 from .database import Base
 import datetime
+from datetime import datetime as dt
 
 class Assistant(Base):
     __tablename__ = "assistants"
@@ -16,10 +17,14 @@ class Document(Base):
     id = Column(Integer, primary_key=True)
     assistant_id = Column(Integer, ForeignKey("assistants.id", ondelete="CASCADE"))
     filename = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP, default=dt.utcnow)
 
 class Chunk(Base):
     __tablename__ = "chunks"
     id = Column(Integer, primary_key=True)
     assistant_id = Column(Integer, ForeignKey("assistants.id", ondelete="CASCADE"))
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=True)
+    chunk_index = Column(Integer)
     content = Column(TEXT, nullable=False)
     embedding = Column(Vector(1536)) # Dimensión para text-embedding-3-small
+    created_at = Column(TIMESTAMP, default=dt.utcnow)

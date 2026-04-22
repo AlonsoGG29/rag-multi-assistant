@@ -23,3 +23,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+
+# Esquemas para Chat con Documento
+class ChatWithDocumentRequest(BaseModel):
+    assistant_id: int
+    message: str

@@ -1,12 +1,12 @@
 import os
-from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
+from fastapi import FastAPI, Depends, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
 from dotenv import load_dotenv
 
 from . import models, schemas, database
-from .services import assistant, rag, chat
+from .services import assistant, rag, chat, document
 from .utils import pdf_processor
 
 load_dotenv()
@@ -34,25 +34,72 @@ def create_assistant(data: schemas.AssistantCreate, db: Session = Depends(databa
 
 @app.post("/assistants/{asst_id}/documents")
 async def upload_document(asst_id: int, file: UploadFile = File(...), db: Session = Depends(database.get_db)):
-    # 1. Guardar temporalmente y extraer texto
-    content = await file.read()
-    text = pdf_processor.extract_text(content) # Lógica sencilla con PyPDF
-    
-    # 2. Generar chunks y embeddings
-    chunks = rag.split_text(text)
-    for i, chunk_text in enumerate(chunks):
-        vector = rag.get_embedding(chunk_text)
-        new_chunk = models.Chunk(
-            assistant_id=asst_id,
-            content=chunk_text,
-            embedding=vector
-        )
-        db.add(new_chunk)
-    
-    db.commit()
-    return {"message": "Documento indexado con éxito"}
+    """Sube y indexa un documento PDF para un asistente"""
+    try:
+        # Verificar que el asistente existe
+        asst = db.query(models.Assistant).filter(models.Assistant.id == asst_id).first()
+        if not asst:
+            return {"error": "Asistente no encontrado"}
+        
+        # Leer y procesar el archivo
+        content = await file.read()
+        text = pdf_processor.extract_text(content)
+        
+        # Indexar el documento
+        result = document.index_document(db, asst_id, file.filename, text)
+        
+        return result
+    except Exception as e:
+        return {"error": f"Error al procesar documento: {str(e)}"}
+
+@app.get("/assistants/{asst_id}/documents")
+def get_documents(asst_id: int, db: Session = Depends(database.get_db)):
+    """Obtiene los documentos indexados de un asistente"""
+    docs = db.query(models.Document).filter(
+        models.Document.assistant_id == asst_id
+    ).all()
+    return [
+        {
+            "id": doc.id,
+            "filename": doc.filename,
+            "created_at": doc.created_at
+        }
+        for doc in docs
+    ]
 
 @app.post("/chat", response_model=schemas.ChatResponse)
 def chat_endpoint(req: schemas.ChatRequest, db: Session = Depends(database.get_db)):
-    response_text = chat.generate_rag_response(db, req.assistant_id, req.message)
-    return {"response": response_text}
+    try:
+        response_text = chat.generate_rag_response(db, req.assistant_id, req.message)
+        return {"response": response_text}
+    except Exception as e:
+        return {"response": f"Error: {str(e)}"}
+
+@app.post("/chat/document", response_model=schemas.ChatResponse)
+async def chat_with_document(
+    assistant_id: int = Form(...), 
+    message: str = Form(...), 
+    file: UploadFile = File(...),
+    db: Session = Depends(database.get_db)
+):
+    """
+    Chat con un documento específico.
+    El asistente solo responde basado en el contenido del PDF cargado.
+    """
+    try:
+        # 1. Leer el contenido del archivo
+        content = await file.read()
+        
+        # 2. Extraer texto del PDF
+        document_text = pdf_processor.extract_text(content)
+        
+        # 3. Generar respuesta basada solo en este documento
+        response_text = chat.generate_response_from_document(
+            assistant_id, 
+            message, 
+            document_text
+        )
+        
+        return {"response": response_text}
+    except Exception as e:
+        return {"response": f"Error al procesar documento: {str(e)}"}

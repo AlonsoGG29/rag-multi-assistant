@@ -134,10 +134,16 @@
             background-color: white;
             border-top: 1px solid #ddd;
             display: flex;
+            flex-direction: column;
             gap: 10px;
         }
 
-        .chat-input-area input {
+        .chat-input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area input[type="text"] {
             flex: 1;
             padding: 10px;
             border: 1px solid #ddd;
@@ -145,9 +151,43 @@
             font-size: 14px;
         }
 
-        .chat-input-area input:focus {
+        .chat-input-area input[type="text"]:focus {
             outline: none;
             border-color: #3498db;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .btn-attach-file {
+            padding: 10px 15px;
+            background-color: #95a5a6;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            min-width: 100px;
+        }
+
+        .btn-attach-file:hover {
+            background-color: #7f8c8d;
+        }
+
+        .file-attached {
+            background-color: #27ae60;
+        }
+
+        .file-attached:hover {
+            background-color: #229954;
         }
 
         .btn-send {
@@ -212,13 +252,26 @@
             </div>
 
             <div class="chat-input-area">
-                <input 
-                    type="text" 
-                    id="messageInput" 
-                    placeholder="Pregunta algo al asistente..."
-                    disabled
-                >
-                <button class="btn-send" id="sendBtn" onclick="sendMessage()" disabled>Enviar</button>
+                <div class="chat-input-row">
+                    <input 
+                        type="text" 
+                        id="messageInput" 
+                        placeholder="Pregunta algo al asistente..."
+                        disabled
+                    >
+                    <div class="file-input-wrapper">
+                        <input 
+                            type="file" 
+                            id="fileInput" 
+                            accept=".pdf"
+                        >
+                        <button class="btn-attach-file" id="attachBtn" onclick="document.getElementById('fileInput').click()" disabled>
+                            📎 Adjuntar PDF
+                        </button>
+                    </div>
+                    <button class="btn-send" id="sendBtn" onclick="sendMessage()" disabled>Enviar</button>
+                </div>
+                <div id="fileStatus" style="font-size: 12px; color: #7f8c8d; display: none;"></div>
             </div>
         </div>
     </div>
@@ -228,6 +281,7 @@
         let assistants = [];
         let selectedAssistantId = null;
         let messages = [];
+        let attachedFile = null;
 
         // Cargar asistentes al inicio
         async function loadAssistants() {
@@ -265,6 +319,7 @@
         function selectAssistant(id, name) {
             selectedAssistantId = id;
             messages = [];
+            attachedFile = null;
 
             // Actualizar UI
             document.querySelectorAll('.assistant-item').forEach(item => {
@@ -276,10 +331,42 @@
             document.getElementById('chatMessages').innerHTML = '<p class="loading">Conversación iniciada. Haz una pregunta...</p>';
             document.getElementById('messageInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
+            document.getElementById('attachBtn').disabled = false;
+            document.getElementById('fileStatus').style.display = 'none';
             document.getElementById('messageInput').focus();
         }
 
-        // Enviar mensaje
+        // Manejar selección de archivo
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('fileInput');
+            const attachBtn = document.getElementById('attachBtn');
+            const fileStatus = document.getElementById('fileStatus');
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    attachedFile = e.target.files[0];
+                    fileStatus.textContent = `📄 ${attachedFile.name} listo`;
+                    fileStatus.style.display = 'block';
+                    attachBtn.classList.add('file-attached');
+                    attachBtn.textContent = '✓ PDF Adjunto';
+                } else {
+                    attachedFile = null;
+                    fileStatus.style.display = 'none';
+                    attachBtn.classList.remove('file-attached');
+                    attachBtn.textContent = '📎 Adjuntar PDF';
+                }
+            });
+
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !document.getElementById('sendBtn').disabled) {
+                    sendMessage();
+                }
+            });
+
+            loadAssistants();
+        });
+
+        // Enviar mensaje (con o sin archivo)
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
@@ -292,21 +379,45 @@
 
             input.value = '';
             document.getElementById('sendBtn').disabled = true;
+            document.getElementById('attachBtn').disabled = true;
 
             try {
-                // Llamar a la API
-                const response = await fetch(`${API_BASE}/chat`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        assistant_id: selectedAssistantId,
-                        message: message
-                    })
-                });
+                let response;
+                let data;
 
-                if (!response.ok) throw new Error("Error al obtener respuesta");
+                if (attachedFile) {
+                    // Enviar con archivo - usar FormData
+                    const formData = new FormData();
+                    formData.append('assistant_id', selectedAssistantId);
+                    formData.append('message', message);
+                    formData.append('file', attachedFile);
 
-                const data = await response.json();
+                    response = await fetch(`${API_BASE}/chat/document`, {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    // Limpiar archivo después de enviarlo
+                    attachedFile = null;
+                    document.getElementById('fileInput').value = '';
+                    document.getElementById('fileStatus').style.display = 'none';
+                    document.getElementById('attachBtn').classList.remove('file-attached');
+                    document.getElementById('attachBtn').textContent = '📎 Adjuntar PDF';
+                } else {
+                    // Enviar sin archivo - JSON normal
+                    response = await fetch(`${API_BASE}/chat`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            assistant_id: selectedAssistantId,
+                            message: message
+                        })
+                    });
+                }
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+                data = await response.json();
                 messages.push({ role: 'assistant', content: data.response });
                 displayMessages();
             } catch (error) {
@@ -315,6 +426,7 @@
                 displayMessages();
             } finally {
                 document.getElementById('sendBtn').disabled = false;
+                document.getElementById('attachBtn').disabled = false;
                 document.getElementById('messageInput').focus();
             }
         }
