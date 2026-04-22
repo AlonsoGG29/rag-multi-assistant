@@ -1,9 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 sqlalchemy
 psycopg2-binary
 pgvector
 python-dotenv
 openai
-pypdf
+PyPDF2
 python-multipart
