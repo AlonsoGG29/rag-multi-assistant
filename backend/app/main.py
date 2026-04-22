@@ -3,10 +3,13 @@ from fastapi import FastAPI, Depends, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List
+from dotenv import load_dotenv
 
 from . import models, schemas, database
 from .services import assistant, rag, chat
-from .utils import pdf_processor # Necesitarás crear este pequeño utilitario para extraer texto
+from .utils import pdf_processor
+
+load_dotenv()
 
 app = FastAPI(title="RAG Multi-Asistente API")
 
