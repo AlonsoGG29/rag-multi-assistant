@@ -1,18 +1,387 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Multi-Asistente RAG</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-      /* Estilo opcional para que el scroll se vea mejor */
-      ::-webkit-scrollbar { width: 6px; }
-      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* SIDEBAR */
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 1px solid #34495e;
+        }
+
+        .sidebar h2 {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .btn-new-assistant {
+            width: 100%;
+            padding: 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .btn-new-assistant:hover {
+            background-color: #2980b9;
+        }
+
+        .assistants-list {
+            list-style: none;
+        }
+
+        .assistant-item {
+            padding: 10px;
+            margin-bottom: 5px;
+            background-color: #34495e;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .assistant-item:hover {
+            background-color: #445566;
+        }
+
+        .assistant-item.active {
+            background-color: #3498db;
+        }
+
+        /* MAIN CHAT */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: white;
+        }
+
+        .chat-header {
+            padding: 15px 20px;
+            background-color: #34495e;
+            color: white;
+            border-bottom: 1px solid #2c3e50;
+        }
+
+        .chat-header h1 {
+            font-size: 18px;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.assistant {
+            justify-content: flex-start;
+        }
+
+        .message-content {
+            max-width: 70%;
+            padding: 12px 15px;
+            border-radius: 8px;
+            word-wrap: break-word;
+        }
+
+        .message.user .message-content {
+            background-color: #3498db;
+            color: white;
+        }
+
+        .message.assistant .message-content {
+            background-color: #ecf0f1;
+            color: #2c3e50;
+        }
+
+        .chat-input-area {
+            padding: 15px 20px;
+            background-color: white;
+            border-top: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .chat-input-area input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .btn-send {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-send:hover {
+            background-color: #2980b9;
+        }
+
+        .btn-send:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            text-align: center;
+            color: #7f8c8d;
+            padding: 20px;
+        }
+
+        .error {
+            background-color: #e74c3c;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .success {
+            background-color: #27ae60;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
     </style>
-  </head>
-  <body class="bg-gray-50">
-    <noscript>Necesitas activar JavaScript para usar esta aplicación.</noscript>
-    <div id="root"></div>
-  </body>
+</head>
+<body>
+    <div class="container">
+        <!-- SIDEBAR -->
+        <div class="sidebar">
+            <h2>Asistentes RAG</h2>
+            <button class="btn-new-assistant" onclick="showNewAssistantForm()">+ Nuevo Asistente</button>
+            <ul class="assistants-list" id="assistantsList"></ul>
+        </div>
+
+        <!-- MAIN CHAT -->
+        <div class="main-content">
+            <div class="chat-header">
+                <h1 id="chatTitle">Selecciona un asistente</h1>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <p class="loading">Cargando asistentes...</p>
+            </div>
+
+            <div class="chat-input-area">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    placeholder="Pregunta algo al asistente..."
+                    disabled
+                >
+                <button class="btn-send" id="sendBtn" onclick="sendMessage()" disabled>Enviar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://localhost:8000";
+        let assistants = [];
+        let selectedAssistantId = null;
+        let messages = [];
+
+        // Cargar asistentes al inicio
+        async function loadAssistants() {
+            try {
+                const response = await fetch(`${API_BASE}/assistants`);
+                if (!response.ok) throw new Error("Error al cargar asistentes");
+                
+                assistants = await response.json();
+                displayAssistants();
+                
+                if (assistants.length === 0) {
+                    document.getElementById('chatMessages').innerHTML = '<p class="loading">No hay asistentes. Crea uno nuevo.</p>';
+                }
+            } catch (error) {
+                console.error(error);
+                document.getElementById('chatMessages').innerHTML = `<p class="error">Error al conectar con el servidor: ${error.message}</p>`;
+            }
+        }
+
+        // Mostrar lista de asistentes
+        function displayAssistants() {
+            const list = document.getElementById('assistantsList');
+            list.innerHTML = '';
+
+            assistants.forEach(assistant => {
+                const li = document.createElement('li');
+                li.className = 'assistant-item';
+                li.textContent = assistant.name;
+                li.onclick = () => selectAssistant(assistant.id, assistant.name);
+                list.appendChild(li);
+            });
+        }
+
+        // Seleccionar un asistente
+        function selectAssistant(id, name) {
+            selectedAssistantId = id;
+            messages = [];
+
+            // Actualizar UI
+            document.querySelectorAll('.assistant-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            document.getElementById('chatTitle').textContent = `Chat con ${name}`;
+            document.getElementById('chatMessages').innerHTML = '<p class="loading">Conversación iniciada. Haz una pregunta...</p>';
+            document.getElementById('messageInput').disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+            document.getElementById('messageInput').focus();
+        }
+
+        // Enviar mensaje
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message || !selectedAssistantId) return;
+
+            // Agregar mensaje del usuario
+            messages.push({ role: 'user', content: message });
+            displayMessages();
+
+            input.value = '';
+            document.getElementById('sendBtn').disabled = true;
+
+            try {
+                // Llamar a la API
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        assistant_id: selectedAssistantId,
+                        message: message
+                    })
+                });
+
+                if (!response.ok) throw new Error("Error al obtener respuesta");
+
+                const data = await response.json();
+                messages.push({ role: 'assistant', content: data.response });
+                displayMessages();
+            } catch (error) {
+                console.error(error);
+                messages.push({ role: 'assistant', content: `Error: ${error.message}` });
+                displayMessages();
+            } finally {
+                document.getElementById('sendBtn').disabled = false;
+                document.getElementById('messageInput').focus();
+            }
+        }
+
+        // Mostrar mensajes en el chat
+        function displayMessages() {
+            const chatDiv = document.getElementById('chatMessages');
+            chatDiv.innerHTML = '';
+
+            messages.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = `message ${msg.role}`;
+
+                const content = document.createElement('div');
+                content.className = 'message-content';
+                content.textContent = msg.content;
+
+                div.appendChild(content);
+                chatDiv.appendChild(div);
+            });
+
+            // Scroll al final
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        // Crear nuevo asistente (básico)
+        function showNewAssistantForm() {
+            const name = prompt('Nombre del asistente:');
+            if (!name) return;
+
+            const instructions = prompt('Instrucciones del asistente:');
+            if (!instructions) return;
+
+            createAssistant(name, instructions);
+        }
+
+        async function createAssistant(name, instructions) {
+            try {
+                const response = await fetch(`${API_BASE}/assistants`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        instructions: instructions,
+                        description: ''
+                    })
+                });
+
+                if (!response.ok) throw new Error("Error al crear asistente");
+
+                alert('Asistente creado exitosamente');
+                loadAssistants();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Permitir enviar con Enter
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('messageInput').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !document.getElementById('sendBtn').disabled) {
+                    sendMessage();
+                }
+            });
+
+            loadAssistants();
+        });
+    </script>
+</body>
 </html>
