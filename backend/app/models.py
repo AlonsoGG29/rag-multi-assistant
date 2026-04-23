@@ -28,3 +28,18 @@ class Chunk(Base):
     content = Column(TEXT, nullable=False)
     embedding = Column(Vector(1536)) # Dimensión para text-embedding-3-small
     created_at = Column(TIMESTAMP, default=dt.utcnow)
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id = Column(Integer, primary_key=True)
+    assistant_id = Column(Integer, ForeignKey("assistants.id", ondelete="CASCADE"), nullable=False)
+    session_id = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP, default=dt.utcnow)
+
+class Message(Base):
+    __tablename__ = "messages"
+    id = Column(Integer, primary_key=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String, nullable=False)  # 'user' | 'assistant'
+    content = Column(TEXT, nullable=False)
+    created_at = Column(TIMESTAMP, default=dt.utcnow)

@@ -22,6 +22,7 @@ CREATE TABLE chunks (
   chunk_index INTEGER NOT NULL,
   content TEXT NOT NULL,
   embedding vector(1536), -- ajusta a dimensión del modelo
+  created_at TIMESTAMP DEFAULT NOW(),
   metadata JSONB
 );
 

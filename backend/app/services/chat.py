@@ -1,8 +1,12 @@
 import os
+import logging
 from openai import AzureOpenAI
 from sqlalchemy.orm import Session
 from .rag import search_context, get_embedding, split_text
 from .. import models
+import uuid
+
+logger = logging.getLogger(__name__)
 
 client = AzureOpenAI(
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
@@ -10,21 +14,70 @@ client = AzureOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT")
 )
 
-def generate_rag_response(db: Session, assistant_id: int, user_message: str):
+def get_or_create_conversation(db: Session, assistant_id: int, session_id: str = None):
+    """Obtiene o crea una conversación"""
+    if not session_id:
+        session_id = str(uuid.uuid4())
+    
+    conv = db.query(models.Conversation).filter(
+        models.Conversation.assistant_id == assistant_id,
+        models.Conversation.session_id == session_id
+    ).first()
+    
+    if not conv:
+        logger.info(f"Creando nueva conversación: {session_id}")
+        conv = models.Conversation(
+            assistant_id=assistant_id,
+            session_id=session_id
+        )
+        db.add(conv)
+        db.flush()
+    
+    return conv
+
+def save_message(db: Session, conversation_id: int, role: str, content: str):
+    """Guarda un mensaje en la BD"""
+    try:
+        msg = models.Message(
+            conversation_id=conversation_id,
+            role=role,
+            content=content
+        )
+        db.add(msg)
+        db.commit()
+        logger.info(f"Mensaje guardado: {role}")
+        return msg
+    except Exception as e:
+        logger.error(f"Error al guardar mensaje: {str(e)}")
+        db.rollback()
+        raise
+
+def generate_rag_response(db: Session, assistant_id: int, user_message: str, session_id: str = None):
     """Genera respuesta usando RAG con documentos previamente indexados"""
     try:
-        # 1. Obtener datos del asistente
+        logger.info(f"Generando respuesta para asistente {assistant_id}")
+        
+        # 1. Obtener/crear conversación
+        conv = get_or_create_conversation(db, assistant_id, session_id)
+        logger.info(f"Conversación ID: {conv.id}")
+        
+        # 2. Guardar mensaje del usuario
+        save_message(db, conv.id, "user", user_message)
+        
+        # 3. Obtener datos del asistente
         assistant = db.query(models.Assistant).filter(models.Assistant.id == assistant_id).first()
         if not assistant:
             return "Error: Asistente no encontrado"
         
-        # 2. Búsqueda de contexto (AISLAMIENTO)
+        # 4. Búsqueda de contexto (AISLAMIENTO)
         context = search_context(db, assistant_id, user_message)
         
         if not context:
             context = "No hay documentos disponibles para este asistente."
         
-        # 3. Prompt del Sistema (Reglas de Oro)
+        logger.info(f"Contexto recuperado: {len(context)} caracteres")
+        
+        # 5. Prompt del Sistema (Reglas de Oro)
         system_prompt = f"""
         Eres el siguiente asistente: {assistant.name}
         Instrucciones de comportamiento: {assistant.instructions}
@@ -38,7 +91,8 @@ def generate_rag_response(db: Session, assistant_id: int, user_message: str):
         {context}
         """
 
-        # 4. Llamada al LLM (GPT-4o-mini es la opción económica)
+        # 6. Llamada al LLM (GPT-4o-mini es la opción económica)
+        logger.info("Llamando a Azure OpenAI...")
         response = client.chat.completions.create(
             model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
             messages=[
@@ -48,8 +102,15 @@ def generate_rag_response(db: Session, assistant_id: int, user_message: str):
             temperature=0
         )
         
-        return response.choices[0].message.content
+        response_text = response.choices[0].message.content
+        logger.info("Respuesta generada exitosamente")
+        
+        # 7. Guardar respuesta del asistente
+        save_message(db, conv.id, "assistant", response_text)
+        
+        return response_text
     except Exception as e:
+        logger.error(f"Error al generar respuesta: {str(e)}", exc_info=True)
         return f"Error al generar respuesta: {str(e)}"
 
 def generate_response_from_document(assistant_id: int, user_message: str, document_text: str):

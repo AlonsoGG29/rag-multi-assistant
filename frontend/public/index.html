@@ -342,13 +342,50 @@
             const attachBtn = document.getElementById('attachBtn');
             const fileStatus = document.getElementById('fileStatus');
 
-            fileInput.addEventListener('change', (e) => {
+            fileInput.addEventListener('change', async (e) => {
                 if (e.target.files.length > 0) {
                     attachedFile = e.target.files[0];
-                    fileStatus.textContent = `📄 ${attachedFile.name} listo`;
+                    
+                    // Cargar el PDF al servidor (indexar)
+                    if (!selectedAssistantId) {
+                        alert('Selecciona un asistente primero');
+                        fileInput.value = '';
+                        return;
+                    }
+                    
+                    console.log(`📤 Uploadando PDF: ${attachedFile.name}`);
+                    fileStatus.textContent = '⏳ Cargando y procesando PDF...';
                     fileStatus.style.display = 'block';
-                    attachBtn.classList.add('file-attached');
-                    attachBtn.textContent = '✓ PDF Adjunto';
+                    
+                    const formData = new FormData();
+                    formData.append('file', attachedFile);
+                    
+                    try {
+                        const response = await fetch(
+                            `${API_BASE}/assistants/${selectedAssistantId}/documents`,
+                            {
+                                method: 'POST',
+                                body: formData
+                            }
+                        );
+                        
+                        const result = await response.json();
+                        
+                        if (result.success) {
+                            fileStatus.textContent = `✅ ${result.filename}: ${result.chunks_indexed} chunks indexados`;
+                            attachBtn.classList.add('file-attached');
+                            attachBtn.textContent = '✓ PDF Indexado';
+                            attachedFile = null;
+                            fileInput.value = '';
+                        } else {
+                            fileStatus.textContent = `❌ Error: ${result.error}`;
+                            fileStatus.style.color = 'red';
+                        }
+                    } catch (error) {
+                        fileStatus.textContent = `❌ Error: ${error.message}`;
+                        fileStatus.style.color = 'red';
+                        console.error(error);
+                    }
                 } else {
                     attachedFile = null;
                     fileStatus.style.display = 'none';
@@ -366,7 +403,7 @@
             loadAssistants();
         });
 
-        // Enviar mensaje (con o sin archivo)
+        // Enviar mensaje (sin archivo - ya indexado)
         async function sendMessage() {
             const input = document.getElementById('messageInput');
             const message = input.value.trim();
@@ -382,42 +419,20 @@
             document.getElementById('attachBtn').disabled = true;
 
             try {
-                let response;
-                let data;
-
-                if (attachedFile) {
-                    // Enviar con archivo - usar FormData
-                    const formData = new FormData();
-                    formData.append('assistant_id', selectedAssistantId);
-                    formData.append('message', message);
-                    formData.append('file', attachedFile);
-
-                    response = await fetch(`${API_BASE}/chat/document`, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    // Limpiar archivo después de enviarlo
-                    attachedFile = null;
-                    document.getElementById('fileInput').value = '';
-                    document.getElementById('fileStatus').style.display = 'none';
-                    document.getElementById('attachBtn').classList.remove('file-attached');
-                    document.getElementById('attachBtn').textContent = '📎 Adjuntar PDF';
-                } else {
-                    // Enviar sin archivo - JSON normal
-                    response = await fetch(`${API_BASE}/chat`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            assistant_id: selectedAssistantId,
-                            message: message
-                        })
-                    });
-                }
+                // Enviar a /chat (el PDF ya fue indexado en la BD)
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        assistant_id: selectedAssistantId,
+                        message: message,
+                        session_id: selectedAssistantId + "_session" // Session consistente por asistente
+                    })
+                });
 
                 if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
-                data = await response.json();
+                const data = await response.json();
                 messages.push({ role: 'assistant', content: data.response });
                 displayMessages();
             } catch (error) {
