@@ -10,6 +10,14 @@ def create_assistant(db: Session, assistant: schemas.AssistantCreate):
 def get_assistants(db: Session):
     return db.query(models.Assistant).all()
 
+def update_assistant(db: Session, assistant_id: int, assistant_update: schemas.AssistantCreate):
+    assistant = db.query(models.Assistant).filter(models.Assistant.id == assistant_id).first()
+    if assistant:
+        for key, value in assistant_update.dict(exclude_unset=True).items():
+            setattr(assistant, key, value)
+        commit_db(db)
+    return assistant
+
 def delete_assistant(db: Session, assistant_id: int):
     assistant = db.query(models.Assistant).filter(models.Assistant.id == assistant_id).first()
     if assistant:

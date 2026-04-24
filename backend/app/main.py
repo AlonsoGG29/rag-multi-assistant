@@ -36,6 +36,20 @@ def list_assistants(db: Session = Depends(database.get_db)):
 def create_assistant(data: schemas.AssistantCreate, db: Session = Depends(database.get_db)):
     return assistant.create_assistant(db, data)
 
+@app.put("/assistants/{asst_id}", response_model=schemas.AssistantResponse)
+def update_assistant_endpoint(asst_id: int, data: schemas.AssistantCreate, db: Session = Depends(database.get_db)):
+    asst = assistant.update_assistant(db, asst_id, data)
+    if not asst:
+        raise HTTPException(status_code=404, detail="Asistente no encontrado")
+    return asst
+
+@app.delete("/assistants/{asst_id}")
+def delete_assistant_endpoint(asst_id: int, db: Session = Depends(database.get_db)):
+    asst = assistant.delete_assistant(db, asst_id)
+    if not asst:
+        raise HTTPException(status_code=404, detail="Asistente no encontrado")
+    return {"message": "Asistente eliminado exitosamente"}
+
 @app.post("/assistants/{asst_id}/documents")
 async def upload_document(asst_id: int, file: UploadFile = File(...), db: Session = Depends(database.get_db)):
     """Sube y indexa un documento PDF para un asistente"""

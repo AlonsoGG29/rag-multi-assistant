@@ -73,6 +73,49 @@
             background-color: #3498db;
         }
 
+        .assistant-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .assistant-name {
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .assistant-actions {
+            display: none;
+            gap: 5px;
+        }
+
+        .assistant-item:hover .assistant-actions {
+            display: flex;
+        }
+
+        .btn-action {
+            padding: 5px 8px;
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.2s;
+        }
+
+        .btn-action:hover {
+            background-color: #c0392b;
+        }
+
+        .btn-edit {
+            background-color: #f39c12;
+        }
+
+        .btn-edit:hover {
+            background-color: #e67e22;
+        }
+
         /* MAIN CHAT */
         .main-content {
             flex: 1;
@@ -309,8 +352,36 @@
             assistants.forEach(assistant => {
                 const li = document.createElement('li');
                 li.className = 'assistant-item';
-                li.textContent = assistant.name;
-                li.onclick = () => selectAssistant(assistant.id, assistant.name);
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'assistant-name';
+                nameSpan.textContent = assistant.name;
+                nameSpan.onclick = () => selectAssistant(assistant.id, assistant.name);
+                
+                const actions = document.createElement('div');
+                actions.className = 'assistant-actions';
+                
+                const editBtn = document.createElement('button');
+                editBtn.className = 'btn-action btn-edit';
+                editBtn.textContent = '✏️ Editar';
+                editBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    editAssistant(assistant.id, assistant.name, assistant.instructions);
+                };
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn-action';
+                deleteBtn.textContent = '🗑️ Eliminar';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteAssistant(assistant.id, assistant.name);
+                };
+                
+                actions.appendChild(editBtn);
+                actions.appendChild(deleteBtn);
+                
+                li.appendChild(nameSpan);
+                li.appendChild(actions);
                 list.appendChild(li);
             });
         }
@@ -493,6 +564,75 @@
                 if (!response.ok) throw new Error("Error al crear asistente");
 
                 alert('Asistente creado exitosamente');
+                loadAssistants();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Editar asistente
+        function editAssistant(id, currentName, currentInstructions) {
+            const name = prompt('Nombre del asistente:', currentName);
+            if (!name) return;
+
+            const instructions = prompt('Instrucciones del asistente:', currentInstructions);
+            if (!instructions) return;
+
+            updateAssistant(id, name, instructions);
+        }
+
+        async function updateAssistant(id, name, instructions) {
+            try {
+                const response = await fetch(`${API_BASE}/assistants/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        instructions: instructions,
+                        description: ''
+                    })
+                });
+
+                if (!response.ok) throw new Error("Error al actualizar asistente");
+
+                alert('Asistente actualizado exitosamente');
+                loadAssistants();
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        }
+
+        // Eliminar asistente
+        function deleteAssistant(id, name) {
+            const confirm = prompt(`¿Estás seguro de que deseas eliminar el asistente "${name}"? (Escribe "SI" para confirmar)`);
+            if (confirm !== 'SI') return;
+
+            removeAssistant(id);
+        }
+
+        async function removeAssistant(id) {
+            try {
+                const response = await fetch(`${API_BASE}/assistants/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) throw new Error("Error al eliminar asistente");
+
+                alert('Asistente eliminado exitosamente');
+                
+                // Si el asistente eliminado estaba seleccionado, limpiar la conversación
+                if (selectedAssistantId === id) {
+                    selectedAssistantId = null;
+                    messages = [];
+                    attachedFile = null;
+                    document.getElementById('chatTitle').textContent = 'Selecciona un asistente';
+                    document.getElementById('chatMessages').innerHTML = '<p class="loading">Cargando asistentes...</p>';
+                    document.getElementById('messageInput').disabled = true;
+                    document.getElementById('sendBtn').disabled = true;
+                    document.getElementById('attachBtn').disabled = true;
+                }
+                
                 loadAssistants();
             } catch (error) {
                 alert(`Error: ${error.message}`);
