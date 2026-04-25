@@ -2,7 +2,13 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 
 def create_assistant(db: Session, assistant: schemas.AssistantCreate):
-    db_assistant = models.Assistant(**assistant.dict())
+    assistant_data = assistant.dict()
+    
+    # Si no hay instrucciones, asignar una por defecto
+    if not assistant_data.get("instructions"):
+        assistant_data["instructions"] = f"Eres un asistente experto llamado {assistant_data['name']}. Ayuda a los usuarios respondiendo preguntas basadas en los documentos que se te proporcionen."
+    
+    db_assistant = models.Assistant(**assistant_data)
     db.add(db_assistant)
     commit_db(db)
     return db_assistant

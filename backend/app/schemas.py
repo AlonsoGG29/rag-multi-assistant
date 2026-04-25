@@ -4,7 +4,7 @@ from typing import Optional, List
 # Esquemas para Asistente
 class AssistantBase(BaseModel):
     name: str
-    instructions: str
+    instructions: Optional[str] = None
     description: Optional[str] = None
 
 class AssistantCreate(AssistantBase):

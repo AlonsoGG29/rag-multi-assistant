@@ -104,6 +104,33 @@ def get_documents(asst_id: int, db: Session = Depends(database.get_db)):
         for doc in docs
     ]
 
+@app.delete("/assistants/{asst_id}/documents/{doc_id}")
+def delete_document(asst_id: int, doc_id: int, db: Session = Depends(database.get_db)):
+    """Elimina un documento del asistente"""
+    try:
+        # Verificar que el documento existe y pertenece al asistente
+        doc = db.query(models.Document).filter(
+            models.Document.id == doc_id,
+            models.Document.assistant_id == asst_id
+        ).first()
+        
+        if not doc:
+            raise HTTPException(status_code=404, detail="Documento no encontrado")
+        
+        # Eliminar los chunks asociados
+        db.query(models.Chunk).filter(models.Chunk.document_id == doc_id).delete()
+        
+        # Eliminar el documento
+        db.delete(doc)
+        db.commit()
+        
+        return {"message": "Documento eliminado exitosamente"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error al eliminar documento: {str(e)}")
+
 @app.post("/chat", response_model=schemas.ChatResponse)
 def chat_endpoint(req: schemas.ChatRequest, db: Session = Depends(database.get_db)):
     try:

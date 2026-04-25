@@ -100,6 +100,7 @@ function App() {
   const [showNewAssistantDialog, setShowNewAssistantDialog] = useState(false);
   const [newAssistantName, setNewAssistantName] = useState("");
   const [newAssistantDesc, setNewAssistantDesc] = useState("");
+  const [creatingAssistant, setCreatingAssistant] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
   const messagesEndRef = useRef(null);
 
@@ -205,6 +206,56 @@ function App() {
     }
   };
 
+  const handleCreateAssistant = async () => {
+    if (!newAssistantName.trim()) {
+      alert("Por favor ingresa un nombre para el asistente");
+      return;
+    }
+
+    setCreatingAssistant(true);
+    try {
+      const res = await axios.post(`${API_BASE}/assistants`, {
+        name: newAssistantName,
+        description: newAssistantDesc
+      });
+
+      setAssistants(prev => [...prev, res.data]);
+      setSelectedId(res.data.id);
+      setNewAssistantName("");
+      setNewAssistantDesc("");
+      setShowNewAssistantDialog(false);
+
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: `✅ Asistente "${newAssistantName}" creado exitosamente`
+      }]);
+    } catch (err) {
+      alert(`Error al crear asistente: ${err.message}`);
+    } finally {
+      setCreatingAssistant(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    if (!window.confirm("¿Estás seguro de que quieres eliminar este PDF?")) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API_BASE}/assistants/${selectedId}/documents/${docId}`);
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: '✅ PDF eliminado exitosamente'
+      }]);
+      fetchDocuments();
+    } catch (err) {
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: `❌ Error al eliminar PDF: ${err.message}`
+      }]);
+    }
+  };
+
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
   };
@@ -297,6 +348,7 @@ function App() {
             documents={documents} 
             uploading={uploading}
             onFileUpload={handleFileUpload}
+            onDeleteDocument={handleDeleteDocument}
           />
         </Box>
       )}
@@ -474,7 +526,7 @@ function App() {
         {/* Diálogo Nuevo Asistente */}
         <Dialog 
           open={showNewAssistantDialog} 
-          onClose={() => setShowNewAssistantDialog(false)} 
+          onClose={() => !creatingAssistant && setShowNewAssistantDialog(false)} 
           maxWidth="sm" 
           fullWidth
         >
@@ -487,6 +539,7 @@ function App() {
                 value={newAssistantName}
                 onChange={(e) => setNewAssistantName(e.target.value)}
                 placeholder="Ej: Abogado IA"
+                disabled={creatingAssistant}
               />
               <TextField
                 fullWidth
@@ -496,15 +549,23 @@ function App() {
                 multiline
                 rows={3}
                 placeholder="Descripción del asistente..."
+                disabled={creatingAssistant}
               />
             </Stack>
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
-            <Button onClick={() => setShowNewAssistantDialog(false)}>Cancelar</Button>
+            <Button 
+              onClick={() => setShowNewAssistantDialog(false)}
+              disabled={creatingAssistant}
+            >
+              Cancelar
+            </Button>
             <Button 
               variant="contained" 
-              onClick={() => setShowNewAssistantDialog(false)}
+              onClick={handleCreateAssistant}
+              disabled={creatingAssistant}
             >
+              {creatingAssistant ? <CircularProgress size={20} sx={{ mr: 1 }} /> : ''}
               Crear Asistente
             </Button>
           </DialogActions>

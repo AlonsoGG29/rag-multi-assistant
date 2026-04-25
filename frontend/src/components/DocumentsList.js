@@ -1,8 +1,8 @@
 import React from 'react';
-import { Box, Stack, Paper, Typography, Button, Alert, CircularProgress } from '@mui/material';
-import { Description as DescriptionIcon, CloudUpload as CloudUploadIcon } from '@mui/icons-material';
+import { Box, Stack, Paper, Typography, Button, Alert, CircularProgress, IconButton } from '@mui/material';
+import { Description as DescriptionIcon, CloudUpload as CloudUploadIcon, Close as CloseIcon } from '@mui/icons-material';
 
-export function DocumentsList({ documents, uploading, onFileUpload }) {
+export function DocumentsList({ documents, uploading, onFileUpload, onDeleteDocument }) {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase' }}>
@@ -60,6 +60,18 @@ export function DocumentsList({ documents, uploading, onFileUpload }) {
                   {new Date(doc.created_at).toLocaleDateString('es-ES')}
                 </Typography>
               </Box>
+              <IconButton
+                size="small"
+                onClick={() => onDeleteDocument && onDeleteDocument(doc.id)}
+                sx={{
+                  color: '#ef4444',
+                  '&:hover': {
+                    bgcolor: '#fee2e2'
+                  }
+                }}
+              >
+                <CloseIcon sx={{ fontSize: 18 }} />
+              </IconButton>
             </Paper>
           ))}
         </Stack>
