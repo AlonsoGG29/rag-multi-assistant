@@ -1,8 +1,91 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  Box,
+  Drawer,
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  TextField,
+  List,
+  ListItemButton,
+  ListItemText,
+  CircularProgress,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Divider,
+  Stack,
+  Avatar,
+  LinearProgress,
+  Tooltip,
+  Menu,
+  MenuItem,
+} from '@mui/material';
+import {
+  Send as SendIcon,
+  CloudUpload as CloudUploadIcon,
+  Logout as LogoutIcon,
+  Settings as SettingsIcon,
+  SmartToy as SmartToyIcon,
+  MoreVert as MoreVertIcon,
+} from '@mui/icons-material';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { ChatMessage, DocumentsList, ChatInput, EmptyState } from './components';
 
 const API_BASE = "http://localhost:8000";
+
+// Tema personalizado
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#2563eb',
+      light: '#3b82f6',
+      dark: '#1d4ed8',
+    },
+    secondary: {
+      main: '#10b981',
+      light: '#34d399',
+      dark: '#059669',
+    },
+    background: {
+      default: '#f3f4f6',
+      paper: '#ffffff',
+    },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h4: {
+      fontWeight: 700,
+    },
+    h6: {
+      fontWeight: 600,
+    },
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 600,
+          borderRadius: '8px',
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: '12px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+        },
+      },
+    },
+  },
+});
 
 function App() {
   const [assistants, setAssistants] = useState([]);
@@ -12,7 +95,13 @@ function App() {
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [sessionId] = useState(() => uuidv4()); // Generar session_id único al cargar
+  const [sessionId] = useState(() => uuidv4());
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [showNewAssistantDialog, setShowNewAssistantDialog] = useState(false);
+  const [newAssistantName, setNewAssistantName] = useState("");
+  const [newAssistantDesc, setNewAssistantDesc] = useState("");
+  const [anchorEl, setAnchorEl] = useState(null);
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     fetchAssistants();
@@ -25,10 +114,21 @@ function App() {
     }
   }, [selectedId]);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const fetchAssistants = async () => {
     try {
       const res = await axios.get(`${API_BASE}/assistants`);
       setAssistants(res.data);
+      if (res.data.length > 0 && !selectedId) {
+        setSelectedId(res.data[0].id);
+      }
     } catch (err) {
       console.error("Error fetching assistants:", err);
     }
@@ -59,13 +159,22 @@ function App() {
       );
 
       if (res.data.success) {
-        alert(`✅ Documento cargado: ${res.data.chunks_indexed} chunks indexados`);
+        setMessages(prev => [...prev, {
+          role: 'system',
+          content: `✅ Documento "${file.name}" cargado exitosamente con ${res.data.chunks_indexed} chunks indexados`
+        }]);
         fetchDocuments();
       } else {
-        alert(`❌ Error: ${res.data.error}`);
+        setMessages(prev => [...prev, {
+          role: 'system',
+          content: `❌ Error: ${res.data.error}`
+        }]);
       }
     } catch (err) {
-      alert(`❌ Error al cargar: ${err.message}`);
+      setMessages(prev => [...prev, {
+        role: 'system',
+        content: `❌ Error al cargar: ${err.message}`
+      }]);
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -73,9 +182,9 @@ function App() {
   };
 
   const sendMessage = async () => {
-    if (!input || !selectedId) return;
+    if (!input.trim() || !selectedId) return;
     const userMsg = { role: 'user', content: input };
-    setMessages([...messages, userMsg]);
+    setMessages(prev => [...prev, userMsg]);
     setInput("");
     setLoading(true);
 
@@ -83,116 +192,325 @@ function App() {
       const res = await axios.post(`${API_BASE}/chat`, {
         assistant_id: selectedId,
         message: input,
-        session_id: sessionId  // ← Enviando session_id
+        session_id: sessionId
       });
       setMessages(prev => [...prev, { role: 'assistant', content: res.data.response }]);
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message}` }]);
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Error: ${err.message}`
+      }]);
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <div className="flex h-screen bg-gray-100 font-sans">
-      {/* Sidebar */}
-      <div className="w-72 bg-slate-800 text-white p-4 overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">🤖 Asistentes RAG</h2>
-        <button className="w-full bg-blue-600 p-2 rounded mb-4 hover:bg-blue-700">+ Nuevo Asistente</button>
-        
-        <div className="mb-6">
-          <h3 className="text-sm font-semibold text-gray-400 mb-2">ASISTENTES</h3>
-          <ul>
-            {assistants.map(a => (
-              <li 
-                key={a.id} 
-                onClick={() => setSelectedId(a.id)}
-                className={`p-3 cursor-pointer rounded mb-1 transition ${selectedId === a.id ? 'bg-blue-500' : 'hover:bg-slate-700'}`}
-              >
-                <div className="font-semibold">{a.name}</div>
-                <div className="text-xs text-gray-300">{a.description || "Sin descripción"}</div>
-              </li>
-            ))}
-          </ul>
-        </div>
+  const handleMenuOpen = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
 
-        {selectedId && (
-          <div className="border-t border-slate-600 pt-4">
-            <h3 className="text-sm font-semibold text-gray-400 mb-2">📄 DOCUMENTOS</h3>
-            
-            <label className="w-full bg-green-600 p-2 rounded mb-3 cursor-pointer hover:bg-green-700 inline-block text-center">
-              {uploading ? "⏳ Cargando..." : "📥 Cargar PDF"}
-              <input 
-                type="file" 
-                accept=".pdf" 
-                onChange={handleFileUpload}
-                disabled={uploading}
-                className="hidden"
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const selectedAssistant = assistants.find(a => a.id === selectedId);
+
+  const drawerContent = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', bgcolor: '#f8fafc' }}>
+      {/* Header */}
+      <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+          <SmartToyIcon />
+          <Typography variant="h6">RAG Assistants</Typography>
+        </Box>
+        <Typography variant="caption" sx={{ opacity: 0.9 }}>
+          Multi-Document AI Chat
+        </Typography>
+      </Box>
+
+      {/* New Assistant Button */}
+      <Box sx={{ p: 2 }}>
+        <Button
+          fullWidth
+          variant="contained"
+          color="secondary"
+          startIcon={<SmartToyIcon />}
+          onClick={() => setShowNewAssistantDialog(true)}
+        >
+          + Nuevo Asistente
+        </Button>
+      </Box>
+
+      <Divider />
+
+      {/* Assistants List */}
+      <Box sx={{ flex: 1, overflow: 'auto', p: 1 }}>
+        <Typography variant="caption" sx={{ px: 2, display: 'block', color: 'text.secondary', mb: 1, fontWeight: 600 }}>
+          ASISTENTES ({assistants.length})
+        </Typography>
+        <List sx={{ py: 0 }}>
+          {assistants.map(a => (
+            <ListItemButton
+              key={a.id}
+              selected={selectedId === a.id}
+              onClick={() => {
+                setSelectedId(a.id);
+                setMobileOpen(false);
+              }}
+              sx={{
+                borderRadius: '8px',
+                mx: 1,
+                mb: 0.5,
+                '&.Mui-selected': {
+                  bgcolor: 'primary.light',
+                  color: 'white',
+                  '&:hover': {
+                    bgcolor: 'primary.main',
+                  },
+                },
+              }}
+            >
+              <Avatar sx={{ width: 32, height: 32, mr: 1.5, bgcolor: 'primary.main', fontSize: '0.9rem' }}>
+                {a.name.charAt(0).toUpperCase()}
+              </Avatar>
+              <ListItemText
+                primary={a.name}
+                secondary={a.description || "Sin descripción"}
+                primaryTypographyProps={{ variant: 'body2', fontWeight: 600 }}
+                secondaryTypographyProps={{
+                  sx: {
+                    color: selectedId === a.id ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+                  }
+                }}
               />
-            </label>
+            </ListItemButton>
+          ))}
+        </List>
+      </Box>
 
-            <div className="space-y-1">
-              {documents.length > 0 ? (
-                documents.map(doc => (
-                  <div key={doc.id} className="p-2 bg-slate-700 rounded text-xs">
-                    <div className="font-semibold truncate">{doc.filename}</div>
-                    <div className="text-gray-400">{new Date(doc.created_at).toLocaleDateString()}</div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-xs text-gray-400 italic">Sin documentos</div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      <Divider />
 
-      {/* Main Chat */}
-      <div className="flex-1 flex flex-col">
-        {selectedId ? (
-          <>
-            <div className="flex-1 p-6 overflow-y-auto bg-white">
-              {messages.length === 0 ? (
-                <div className="text-center text-gray-400 mt-20">
-                  <p className="text-lg">Carga un PDF y comienza a preguntar ↓</p>
-                </div>
+      {/* Documents Section */}
+      {selectedId && (
+        <Box sx={{ p: 2, bgcolor: '#f8fafc' }}>
+          <DocumentsList 
+            documents={documents} 
+            uploading={uploading}
+            onFileUpload={handleFileUpload}
+          />
+        </Box>
+      )}
+    </Box>
+  );
+
+  return (
+    <ThemeProvider theme={theme}>
+      <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
+        {/* Desktop Drawer */}
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            width: 320,
+            flexShrink: 0,
+            '& .MuiDrawer-paper': {
+              width: 320,
+              boxSizing: 'border-box',
+              border: 'none',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+
+        {/* Mobile Drawer */}
+        <Drawer
+          anchor="left"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': {
+              width: 280,
+              boxSizing: 'border-box',
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+
+        {/* Main Content */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          {/* AppBar */}
+          <AppBar 
+            position="static" 
+            elevation={1} 
+            sx={{ 
+              borderBottom: '1px solid #e5e7eb',
+              background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
+            }}
+          >
+            <Toolbar>
+              <IconButton
+                color="inherit"
+                edge="start"
+                onClick={() => setMobileOpen(true)}
+                sx={{ display: { md: 'none' }, mr: 2 }}
+              >
+                ☰
+              </IconButton>
+              
+              {selectedAssistant ? (
+                <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, gap: 1.5 }}>
+                  <Avatar 
+                    sx={{ 
+                      bgcolor: 'rgba(255,255,255,0.2)', 
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      width: 40,
+                      height: 40,
+                    }}
+                  >
+                    {selectedAssistant.name.charAt(0).toUpperCase()}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                      {selectedAssistant.name}
+                    </Typography>
+                    <Typography variant="caption" sx={{ opacity: 0.85 }}>
+                      {selectedAssistant.description || 'Asistente IA'}
+                    </Typography>
+                  </Box>
+                </Box>
               ) : (
-                messages.map((m, i) => (
-                  <div key={i} className={`mb-4 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <span className={`inline-block p-3 rounded-lg max-w-md ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-900'}`}>
-                      {m.content}
-                    </span>
-                  </div>
-                ))
+                <Typography variant="h6" sx={{ flex: 1, fontWeight: 700 }}>
+                  RAG Multi-Assistant
+                </Typography>
               )}
-              {loading && <div className="text-center text-gray-400">⏳ Generando respuesta...</div>}
-            </div>
-            
-            <div className="p-4 bg-white border-t flex gap-2">
-              <input 
-                className="flex-1 border p-2 rounded"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="Pregunta algo al asistente..."
+
+              <Tooltip title="Opciones">
+                <IconButton color="inherit" onClick={handleMenuOpen}>
+                  <MoreVertIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+              >
+                <MenuItem onClick={handleMenuClose}>
+                  <SettingsIcon sx={{ mr: 1, fontSize: 20 }} /> 
+                  Configuración
+                </MenuItem>
+                <MenuItem onClick={handleMenuClose}>
+                  <LogoutIcon sx={{ mr: 1, fontSize: 20 }} /> 
+                  Salir
+                </MenuItem>
+              </Menu>
+            </Toolbar>
+          </AppBar>
+
+          {/* Chat Area */}
+          {selectedId ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              {/* Messages */}
+              <Box
+                sx={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  p: 2,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  bgcolor: '#fafbfc',
+                }}
+              >
+                {messages.length === 0 ? (
+                  <EmptyState 
+                    icon={CloudUploadIcon}
+                    title="Comienza una conversación"
+                    subtitle="Carga un documento PDF y haz preguntas al asistente"
+                  />
+                ) : (
+                  <>
+                    {messages.map((m, i) => (
+                      <ChatMessage key={i} message={m} index={i} />
+                    ))}
+                    {loading && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+                          <SmartToyIcon sx={{ fontSize: 18 }} />
+                        </Avatar>
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                          Generando respuesta...
+                        </Typography>
+                      </Box>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </Box>
+
+              {loading && <LinearProgress sx={{ height: 3 }} />}
+
+              {/* Área de Input */}
+              <ChatInput 
+                input={input}
+                onInput={setInput}
+                onSend={sendMessage}
                 disabled={loading}
               />
-              <button 
-                onClick={sendMessage} 
-                disabled={loading || !input}
-                className="bg-blue-600 text-white px-6 rounded hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                Enviar
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-400">
-            <p className="text-lg">Selecciona un asistente para comenzar</p>
-          </div>
-        )}
-      </div>
-    </div>
+            </Box>
+          ) : (
+            <EmptyState 
+              icon={SmartToyIcon}
+              title="Selecciona un asistente"
+              subtitle="Elige un asistente del sidebar para comenzar a conversar"
+            />
+          )}
+        </Box>
+
+        {/* Diálogo Nuevo Asistente */}
+        <Dialog 
+          open={showNewAssistantDialog} 
+          onClose={() => setShowNewAssistantDialog(false)} 
+          maxWidth="sm" 
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 700 }}>Crear Nuevo Asistente</DialogTitle>
+          <DialogContent sx={{ pt: 2 }}>
+            <Stack spacing={2}>
+              <TextField
+                fullWidth
+                label="Nombre del Asistente"
+                value={newAssistantName}
+                onChange={(e) => setNewAssistantName(e.target.value)}
+                placeholder="Ej: Abogado IA"
+              />
+              <TextField
+                fullWidth
+                label="Descripción"
+                value={newAssistantDesc}
+                onChange={(e) => setNewAssistantDesc(e.target.value)}
+                multiline
+                rows={3}
+                placeholder="Descripción del asistente..."
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ p: 2 }}>
+            <Button onClick={() => setShowNewAssistantDialog(false)}>Cancelar</Button>
+            <Button 
+              variant="contained" 
+              onClick={() => setShowNewAssistantDialog(false)}
+            >
+              Crear Asistente
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Box>
+    </ThemeProvider>
   );
 }
 
